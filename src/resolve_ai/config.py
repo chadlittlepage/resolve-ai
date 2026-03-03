@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 class Config:
     """Application configuration loaded from environment."""
 
-    anthropic_api_key: str
-    model: str = "claude-haiku-4-5-20251001"
+    google_api_key: str
+    model: str = "gemini-3.0-flash-preview"
     max_retries: int = 3
     temp_dir: Path = field(default_factory=lambda: Path("/tmp/resolve-ai-stills"))
 
@@ -26,13 +26,14 @@ def load_config() -> Config:
     """Load configuration from environment variables."""
     load_dotenv()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         raise SystemExit(
-            "ANTHROPIC_API_KEY not set. Export it or add it to a .env file in the project root."
+            "GOOGLE_API_KEY not set. Export it or add it to a .env file in the project root.\n"
+            "Get a free key at https://aistudio.google.com"
         )
 
     return Config(
-        anthropic_api_key=api_key,
-        model=os.environ.get("RESOLVE_AI_MODEL", "claude-haiku-4-5-20251001"),
+        google_api_key=api_key,
+        model=os.environ.get("RESOLVE_AI_MODEL", "gemini-3.0-flash-preview"),
     )

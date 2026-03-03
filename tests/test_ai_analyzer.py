@@ -36,7 +36,7 @@ Water: No"""
 
 
 def test_parse_response() -> None:
-    result = _parse_response(SAMPLE_RESPONSE, "Clip 1", 0, "claude-haiku-4-5-20251001")
+    result = _parse_response(SAMPLE_RESPONSE, "Clip 1", 0, "gemini-2.0-flash")
 
     assert result.clip_name == "Clip 1"
     assert result.clip_index == 0
@@ -59,25 +59,25 @@ def test_parse_response() -> None:
 
 
 def test_parse_response_to_metadata() -> None:
-    result = _parse_response(SAMPLE_RESPONSE, "Clip 1", 0, "claude-haiku-4-5-20251001")
+    result = _parse_response(SAMPLE_RESPONSE, "Clip 1", 0, "gemini-2.0-flash")
     meta = result.to_metadata_dict()
 
     assert meta["Backs"] == "Yes"
     assert meta["Dark Scene"] == "Yes"
     assert meta["Water"] == "No"
-    assert meta["AI Model"] == "claude-haiku-4-5-20251001"
+    assert meta["AI Model"] == "gemini-2.0-flash"
     assert "Interior" in meta["Location"]
 
 
 def test_analyze_frame_api_call() -> None:
-    config = Config(anthropic_api_key="test-key")
+    config = Config(google_api_key="test-key")
 
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=SAMPLE_RESPONSE)]
+    mock_response.text = SAMPLE_RESPONSE
 
-    with patch("resolve_ai.ai_analyzer.anthropic.Anthropic") as mock_client_cls:
+    with patch("resolve_ai.ai_analyzer.genai.Client") as mock_client_cls:
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_response
+        mock_client.models.generate_content.return_value = mock_response
         mock_client_cls.return_value = mock_client
 
         result = analyze_frame(
@@ -91,18 +91,18 @@ def test_analyze_frame_api_call() -> None:
 
     assert result.error is None
     assert result.clip_name == "Test Clip"
-    mock_client.messages.create.assert_called_once()
+    mock_client.models.generate_content.assert_called_once()
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["model"] == "gemini-3.0-flash-preview"
 
 
 def test_analyze_frame_retries_on_error() -> None:
-    config = Config(anthropic_api_key="test-key", max_retries=2)
+    config = Config(google_api_key="test-key", max_retries=2)
 
-    with patch("resolve_ai.ai_analyzer.anthropic.Anthropic") as mock_client_cls:
+    with patch("resolve_ai.ai_analyzer.genai.Client") as mock_client_cls:
         mock_client = MagicMock()
-        mock_client.messages.create.side_effect = Exception("API down")
+        mock_client.models.generate_content.side_effect = Exception("API down")
         mock_client_cls.return_value = mock_client
 
         with patch("resolve_ai.ai_analyzer.time.sleep"):

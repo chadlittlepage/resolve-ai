@@ -1,10 +1,12 @@
-"""Claude Vision analysis of captured frames."""
+"""Gemini Vision analysis of captured frames."""
 
 from __future__ import annotations
 
+import base64
 import time
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from resolve_ai.config import Config
 from resolve_ai.models import ClipAnalysis, ColoristFlags, SceneDescription
@@ -53,50 +55,33 @@ def analyze_frame(
     duration_frames: int,
     fps: float = 24.0,
 ) -> ClipAnalysis:
-    """Send a frame to Claude Haiku for scene analysis.
+    """Send a frame to Gemini Flash for scene analysis.
 
     Retries up to config.max_retries times on transient failures.
     """
     duration_sec = duration_frames / fps
     prompt = ANALYSIS_PROMPT_TEMPLATE.format(duration_sec=duration_sec)
 
-    client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+    client = genai.Client(api_key=config.google_api_key)
+
+    image_bytes = base64.b64decode(image_b64)
+    image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
     last_error: Exception | None = None
     for attempt in range(config.max_retries):
         try:
-            response = client.messages.create(
+            response = client.models.generate_content(
                 model=config.model,
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_b64,
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt,
-                            },
-                        ],
-                    }
-                ],
+                contents=[image_part, prompt],  # type: ignore[arg-type]
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=1024,
+                ),
             )
 
-            block = response.content[0]
-            text: str = block.text  # type: ignore[union-attr]
+            text = response.text or ""
             return _parse_response(text, clip_name, clip_index, config.model)
 
-        except anthropic.RateLimitError as e:
-            last_error = e
-            time.sleep(2 ** (attempt + 1))
         except Exception as e:
             last_error = e
             if attempt < config.max_retries - 1:

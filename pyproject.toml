@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "resolve-ai"
 version = "0.1.0"
-description = "AI-powered scene analysis for DaVinci Resolve using Claude Vision"
+description = "AI-powered scene analysis for DaVinci Resolve using Gemini Vision"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ authors = [
     { name = "Chad Littlepage" },
 ]
 dependencies = [
-    "anthropic>=0.40.0",
+    "google-genai>=1.0.0",
     "click>=8.1.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
@@ -46,7 +46,7 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["DaVinciResolveScript"]
+module = ["DaVinciResolveScript", "google.genai", "google.genai.types"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
