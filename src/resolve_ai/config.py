@@ -14,7 +14,7 @@ class Config:
     """Application configuration loaded from environment."""
 
     google_api_key: str
-    model: str = "gemini-3.0-flash-preview"
+    model: str = "gemini-2.5-flash"
     max_retries: int = 3
     temp_dir: Path = field(default_factory=lambda: Path("/tmp/resolve-ai-stills"))
 
@@ -35,5 +35,5 @@ def load_config() -> Config:
 
     return Config(
         google_api_key=api_key,
-        model=os.environ.get("RESOLVE_AI_MODEL", "gemini-3.0-flash-preview"),
+        model=os.environ.get("RESOLVE_AI_MODEL", "gemini-2.5-flash"),
     )

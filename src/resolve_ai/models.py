@@ -19,6 +19,17 @@ class SceneDescription:
 
 
 @dataclass
+class ShotDescription:
+    """Shot framing, camera, and composition analysis."""
+
+    shot_size: str = ""
+    camera_angle: str = ""
+    camera_movement: str = ""
+    composition: str = ""
+    specialty: str = ""
+
+
+@dataclass
 class ColoristFlags:
     """Boolean flags relevant to colorist workflow."""
 
@@ -48,6 +59,7 @@ class ClipAnalysis:
     clip_name: str
     clip_index: int
     scene: SceneDescription = field(default_factory=SceneDescription)
+    shot: ShotDescription = field(default_factory=ShotDescription)
     flags: ColoristFlags = field(default_factory=ColoristFlags)
     analysis_date: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     model: str = ""
@@ -64,6 +76,13 @@ class ClipAnalysis:
         meta["Color Palette"] = self.scene.palette
         meta["Location"] = self.scene.location
         meta["Time of Day"] = self.scene.time_of_day
+
+        # Shot description fields
+        meta["Shot Size"] = self.shot.shot_size
+        meta["Camera Angle"] = self.shot.camera_angle
+        meta["Camera Movement"] = self.shot.camera_movement
+        meta["Composition"] = self.shot.composition
+        meta["Specialty"] = self.shot.specialty
 
         # Colorist flag fields
         flag_map = {

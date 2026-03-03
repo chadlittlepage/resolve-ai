@@ -15,6 +15,12 @@ PALETTE: Desaturated blues, warm amber practicals, grey concrete
 LOCATION: Interior
 TIME: Artificial
 
+SHOT SIZE: Medium Shot
+CAMERA ANGLE: Eye Level
+CAMERA MOVEMENT: Dolly
+COMPOSITION: Single
+SPECIALTY: None
+
 FLAGS:
 Animation Cut: No
 Backs: Yes
@@ -57,6 +63,12 @@ def test_parse_response() -> None:
     assert result.flags.face_cu is False
     assert result.flags.water is False
 
+    assert result.shot.shot_size == "Medium Shot"
+    assert result.shot.camera_angle == "Eye Level"
+    assert result.shot.camera_movement == "Dolly"
+    assert result.shot.composition == "Single"
+    assert result.shot.specialty == "None"
+
 
 def test_parse_response_to_metadata() -> None:
     result = _parse_response(SAMPLE_RESPONSE, "Clip 1", 0, "gemini-2.0-flash")
@@ -67,6 +79,9 @@ def test_parse_response_to_metadata() -> None:
     assert meta["Water"] == "No"
     assert meta["AI Model"] == "gemini-2.0-flash"
     assert "Interior" in meta["Location"]
+    assert meta["Shot Size"] == "Medium Shot"
+    assert meta["Camera Angle"] == "Eye Level"
+    assert meta["Composition"] == "Single"
 
 
 def test_analyze_frame_api_call() -> None:
@@ -94,7 +109,7 @@ def test_analyze_frame_api_call() -> None:
     mock_client.models.generate_content.assert_called_once()
 
     call_kwargs = mock_client.models.generate_content.call_args.kwargs
-    assert call_kwargs["model"] == "gemini-3.0-flash-preview"
+    assert call_kwargs["model"] == "gemini-2.5-flash"
 
 
 def test_analyze_frame_retries_on_error() -> None:

@@ -9,11 +9,12 @@ from google import genai
 from google.genai import types
 
 from resolve_ai.config import Config
-from resolve_ai.models import ClipAnalysis, ColoristFlags, SceneDescription
+from resolve_ai.models import ClipAnalysis, ColoristFlags, SceneDescription, ShotDescription
 
 SYSTEM_PROMPT = """\
 You are a professional colorist's assistant analyzing video frames for DaVinci Resolve. \
-Provide precise, technical descriptions useful for color grading workflows."""
+Provide precise, technical descriptions useful for color grading workflows. \
+You have deep knowledge of cinematography, shot types, camera work, and composition."""
 
 ANALYSIS_PROMPT_TEMPLATE = """\
 Analyze this video frame for a colorist. The clip is {duration_sec:.1f} seconds long.
@@ -26,6 +27,14 @@ KEYWORDS: [comma-separated descriptive keywords]
 PALETTE: [dominant colors in the frame]
 LOCATION: [Interior/Exterior/Mixed]
 TIME: [Day/Night/Golden Hour/Blue Hour/Dusk/Dawn/Artificial/Unknown]
+
+SHOT SIZE: [Pick ONE: EWS / Wide Shot / Medium Wide / Medium Shot / MCU / Close-Up / ECU / Insert]
+CAMERA ANGLE: [Pick ONE: Eye Level / Low Angle / High Angle / Bird's Eye / Dutch Angle / Worm's Eye]
+CAMERA MOVEMENT: [Pick ONE or TWO: Static / Pan / Tilt / Dolly / Steadicam / Handheld / Crane / \
+Whip Pan / Push In / Pull Back / Zoom / Rack Focus. If unsure from a single frame, say Static]
+COMPOSITION: [Pick ONE: OTS / Two Shot / Three Shot / Single / POV / Reaction Shot]
+SPECIALTY: [Pick any that apply, comma-separated, or None: Oner / Establishing Shot / Cutaway / \
+Master Shot / Split Diopter / Silhouette Shot / Negative Space / Frame Within a Frame]
 
 FLAGS:
 Animation Cut: [Yes/No]
@@ -122,6 +131,14 @@ def _parse_response(
         time_of_day=data.get("TIME", ""),
     )
 
+    shot = ShotDescription(
+        shot_size=data.get("SHOT SIZE", ""),
+        camera_angle=data.get("CAMERA ANGLE", ""),
+        camera_movement=data.get("CAMERA MOVEMENT", ""),
+        composition=data.get("COMPOSITION", ""),
+        specialty=data.get("SPECIALTY", ""),
+    )
+
     def flag(key: str) -> bool:
         return data.get(key, "No").lower().startswith("yes")
 
@@ -149,6 +166,7 @@ def _parse_response(
         clip_name=clip_name,
         clip_index=clip_index,
         scene=scene,
+        shot=shot,
         flags=flags,
         model=model,
     )
