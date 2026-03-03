@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-import importlib.util
 import os
+import sys
 from dataclasses import dataclass
 from typing import Any
+
+# Paths where the DaVinciResolveScript module lives
+_MODULE_PATHS = [
+    "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Modules",
+    os.path.expanduser(
+        "~/Library/Application Support/Blackmagic Design/"
+        "DaVinci Resolve/Developer/Scripting/Modules"
+    ),
+    "/opt/resolve/Developer/Scripting/Modules",
+    r"C:\ProgramData\Blackmagic Design\DaVinci Resolve"
+    r"\Support\Developer\Scripting\Modules",
+]
 
 
 @dataclass
@@ -20,35 +32,22 @@ class ResolveContext:
 
 
 def get_resolve() -> Any | None:
-    """Get the DaVinci Resolve application object."""
+    """Get the DaVinci Resolve application object.
+
+    Adds the scripting modules path to sys.path so that
+    DaVinciResolveScript can self-replace with the native fusionscript library.
+    """
+    # Ensure the modules directory is on sys.path before importing
+    for path in _MODULE_PATHS:
+        if os.path.isdir(path) and path not in sys.path:
+            sys.path.insert(0, path)
+
     try:
         import DaVinciResolveScript as DvrScript  # noqa: N813
 
         return DvrScript.scriptapp("Resolve")
-    except ImportError:
-        pass
-
-    possible_paths = [
-        "/Library/Application Support/Blackmagic Design/"
-        "DaVinci Resolve/Developer/Scripting/Modules/",
-        os.path.expanduser(
-            "~/Library/Application Support/Blackmagic Design/"
-            "DaVinci Resolve/Developer/Scripting/Modules/"
-        ),
-        "/opt/resolve/Developer/Scripting/Modules/",
-        r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\Modules\\",
-    ]
-
-    for path in possible_paths:
-        module_path = os.path.join(path, "DaVinciResolveScript.py")
-        if os.path.exists(module_path):
-            spec = importlib.util.spec_from_file_location("DaVinciResolveScript", module_path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                return module.scriptapp("Resolve")
-
-    return None
+    except (ImportError, AttributeError):
+        return None
 
 
 def connect() -> ResolveContext:

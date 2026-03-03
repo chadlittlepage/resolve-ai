@@ -11,7 +11,11 @@ from rich.table import Table
 
 from resolve_ai.ai_analyzer import analyze_frame
 from resolve_ai.config import load_config
-from resolve_ai.frame_capture import capture_frames_gallery, load_frame_as_base64
+from resolve_ai.frame_capture import (
+    capture_frames_gallery,
+    capture_frames_playhead,
+    load_frame_as_base64,
+)
 from resolve_ai.metadata_writer import (
     clear_metadata,
     write_metadata,
@@ -66,13 +70,17 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
     if dry_run:
         console.print("[yellow]Dry run mode - no metadata will be written.[/yellow]")
 
-    # Capture frames via gallery
+    # Capture frames via gallery, fall back to playhead method
     console.print("\n[bold]Capturing frames...[/bold]")
     try:
         frame_paths = capture_frames_gallery(ctx, config.temp_dir)
     except RuntimeError as e:
-        console.print(f"[red]Frame capture failed: {e}[/red]")
-        return
+        console.print(f"[yellow]Gallery capture failed ({e}), trying playhead method...[/yellow]")
+        try:
+            frame_paths = capture_frames_playhead(ctx, clips, config.temp_dir)
+        except RuntimeError as e2:
+            console.print(f"[red]Frame capture failed: {e2}[/red]")
+            return
 
     if len(frame_paths) != len(clips):
         console.print(
@@ -106,6 +114,11 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
 
             if not media_pool_item:
                 progress.update(task, advance=1, description=f"Skipped: {clip_name} (no media)")
+                skipped += 1
+                continue
+
+            if not frame_path.exists():
+                progress.update(task, advance=1, description=f"Skipped: {clip_name} (no frame)")
                 skipped += 1
                 continue
 

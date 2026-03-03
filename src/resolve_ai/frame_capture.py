@@ -18,10 +18,15 @@ def capture_frames_gallery(
 ) -> list[Path]:
     """Capture middle-frame stills from all clips via the gallery (batch).
 
-    Returns a list of exported JPEG paths in clip order.
+    Switches to the Color page (required for gallery operations),
+    then returns a list of exported JPEG paths in clip order.
     """
+    resolve = ctx.resolve
     timeline = ctx.timeline
     gallery = ctx.gallery
+
+    # Gallery/stills operations require the Color page
+    resolve.OpenPage("color")
 
     if not gallery:
         raise RuntimeError("Could not access the gallery. Is a project open?")
@@ -49,6 +54,43 @@ def capture_frames_gallery(
     # Collect exported files in order
     exported = sorted(temp_dir.glob("clip_*.jpg"))
     return exported
+
+
+def capture_frames_playhead(
+    ctx: ResolveContext,
+    clips: list[Any],
+    temp_dir: Path,
+) -> list[Path]:
+    """Capture a middle-frame still from each clip using ExportCurrentFrameAsStill.
+
+    Fallback when gallery approach fails. Moves playhead to each clip's midpoint
+    and exports one frame at a time. Returns list of JPEG paths in clip order.
+    """
+    resolve = ctx.resolve
+    timeline = ctx.timeline
+    project = ctx.project
+
+    # ExportCurrentFrameAsStill works from Color page
+    resolve.OpenPage("color")
+
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+
+    for i, clip in enumerate(clips):
+        start = clip.GetStart()
+        duration = clip.GetDuration()
+        mid_frame = start + duration // 2
+
+        timeline.SetCurrentTimecode(str(mid_frame))
+
+        out_path = temp_dir / f"clip_{i:04d}.jpg"
+        success = project.ExportCurrentFrameAsStill(str(out_path))
+        if success and out_path.exists():
+            paths.append(out_path)
+        else:
+            paths.append(Path(""))  # placeholder for failed capture
+
+    return paths
 
 
 def capture_frame_thumbnail(
