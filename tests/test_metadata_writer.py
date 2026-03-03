@@ -10,7 +10,12 @@ from resolve_ai.metadata_writer import (
     read_metadata,
     write_metadata,
 )
-from resolve_ai.models import ClipAnalysis, ColoristFlags, SceneDescription
+from resolve_ai.models import (
+    ClipAnalysis,
+    ColoristFlags,
+    SceneDescription,
+    ShotDescription,
+)
 
 
 def test_write_metadata(mock_clip: MagicMock, mock_media_pool_item: MagicMock) -> None:
@@ -18,21 +23,25 @@ def test_write_metadata(mock_clip: MagicMock, mock_media_pool_item: MagicMock) -
         clip_name="Test",
         clip_index=0,
         scene=SceneDescription(scene="A dark room", lighting="Low key"),
+        shot=ShotDescription(shot_size="MCU", camera_angle="Eye Level"),
         flags=ColoristFlags(dark_scene=True, face_cu=True),
-        model="claude-haiku-4-5-20251001",
+        model="gemini-2.5-flash",
     )
 
     result = write_metadata(mock_clip, analysis)
 
     assert result is True
-    mock_media_pool_item.SetMetadata.assert_called_once()
+    # Check individual SetMetadata calls were made
+    calls = mock_media_pool_item.SetMetadata.call_args_list
+    call_dict = {c.args[0]: c.args[1] for c in calls}
 
-    meta = mock_media_pool_item.SetMetadata.call_args[0][0]
-    assert meta["Scene Description"] == "A dark room"
-    assert meta["Dark Scene"] == "Yes"
-    assert meta["Face CU"] == "Yes"
-    assert meta["Water"] == "No"
-    assert meta["AI Model"] == "claude-haiku-4-5-20251001"
+    assert call_dict["Description"] == "A dark room"
+    assert call_dict["Tone"] == "Low key"
+    assert call_dict["Shot Type"] == "MCU"
+    assert call_dict["Angle"] == "Eye Level"
+    assert "Dark Scene" in call_dict["Comments"]
+    assert "Face CU" in call_dict["Comments"]
+    assert "gemini-2.5-flash" in call_dict["Colorist"]
 
 
 def test_write_metadata_no_media_pool_item() -> None:
@@ -47,9 +56,8 @@ def test_clear_metadata(mock_clip: MagicMock, mock_media_pool_item: MagicMock) -
     result = clear_metadata(mock_clip)
 
     assert result is True
-    meta = mock_media_pool_item.SetMetadata.call_args[0][0]
     for key in AI_METADATA_KEYS:
-        assert meta[key] == ""
+        mock_media_pool_item.SetMetadata.assert_any_call(key, "")
 
 
 def test_read_metadata_empty(mock_clip: MagicMock) -> None:
@@ -59,12 +67,12 @@ def test_read_metadata_empty(mock_clip: MagicMock) -> None:
 
 def test_read_metadata_with_data(mock_clip: MagicMock, mock_media_pool_item: MagicMock) -> None:
     mock_media_pool_item.GetMetadata.return_value = {
-        "Scene Description": "A sunny beach",
-        "Water": "Yes",
+        "Description": "A sunny beach",
+        "Shot Type": "Wide Shot",
         "Unrelated Key": "ignored",
     }
 
     result = read_metadata(mock_clip)
-    assert result["Scene Description"] == "A sunny beach"
-    assert result["Water"] == "Yes"
+    assert result["Description"] == "A sunny beach"
+    assert result["Shot Type"] == "Wide Shot"
     assert "Unrelated Key" not in result
