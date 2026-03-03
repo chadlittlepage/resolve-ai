@@ -87,6 +87,16 @@ def connect() -> ResolveContext:
     )
 
 
+def run_scene_detect(timeline: Any) -> bool:
+    """Run scene detection on the timeline, splitting it into clips at each cut.
+
+    Must be called before gathering clips if the timeline is a single long clip.
+    Returns True if successful.
+    """
+    result = timeline.DetectSceneCuts()
+    return bool(result)
+
+
 def get_timeline_clips(timeline: Any, track: int = 1) -> list[Any]:
     """Get all clips from a video track, sorted by start frame."""
     track_count = timeline.GetTrackCount("video")

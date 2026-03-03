@@ -47,3 +47,19 @@ def test_clear_command(mock_connect: MagicMock) -> None:
 
     assert result.exit_code == 0
     assert "Cleared" in result.output
+
+
+@patch("resolve_ai.cli.run_scene_detect")
+@patch("resolve_ai.cli.connect")
+def test_scene_detect_flag(mock_connect: MagicMock, mock_scene_detect: MagicMock) -> None:
+    mock_ctx = MagicMock()
+    mock_ctx.timeline.GetTrackCount.return_value = 1
+    mock_ctx.timeline.GetItemListInTrack.return_value = []
+    mock_connect.return_value = mock_ctx
+    mock_scene_detect.return_value = True
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["analyze", "--scene-detect"], input="n\n")
+
+    mock_scene_detect.assert_called_once_with(mock_ctx.timeline)
+    assert "Scene detection complete" in result.output

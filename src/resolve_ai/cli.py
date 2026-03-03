@@ -16,7 +16,12 @@ from resolve_ai.metadata_writer import (
     clear_metadata,
     write_metadata,
 )
-from resolve_ai.resolve_connection import connect, get_timeline_clips, get_timeline_info
+from resolve_ai.resolve_connection import (
+    connect,
+    get_timeline_clips,
+    get_timeline_info,
+    run_scene_detect,
+)
 
 console = Console()
 
@@ -29,10 +34,23 @@ def cli() -> None:
 @cli.command()
 @click.option("--track", default=1, help="Video track number to analyze.")
 @click.option("--dry-run", is_flag=True, help="Analyze without writing metadata.")
-def analyze(track: int, dry_run: bool) -> None:
+@click.option(
+    "--scene-detect",
+    is_flag=True,
+    help="Run scene detection before analysis to split timeline into clips.",
+)
+def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
     """Analyze all clips on the current timeline."""
     config = load_config()
     ctx = connect()
+
+    if scene_detect:
+        console.print("[bold]Running scene detection...[/bold]")
+        if run_scene_detect(ctx.timeline):
+            console.print("[green]Scene detection complete.[/green]")
+        else:
+            console.print("[red]Scene detection failed. Continuing with existing clips.[/red]")
+
     clips = get_timeline_clips(ctx.timeline, track)
 
     if not clips:
