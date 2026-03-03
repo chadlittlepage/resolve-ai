@@ -97,17 +97,43 @@ def _build_custom_data(analysis: ClipAnalysis) -> str:
     return json.dumps(analysis.to_metadata_dict(), separators=(",", ":"))
 
 
-def write_metadata(clip: Any, analysis: ClipAnalysis) -> bool:
-    """Write analysis to a timeline clip using SetName and AddMarker.
+def _write_media_pool_metadata(clip: Any, analysis: ClipAnalysis) -> bool:
+    """Write analysis to the MediaPoolItem's built-in metadata fields.
 
-    These methods are per-TimelineItem, so each clip gets its own data
-    even when multiple clips share the same source MediaPoolItem.
+    These fields appear in Resolve's Metadata panel. The clip must be
+    selected (playhead on it) before calling this for per-clip writes.
     """
-    # Set clip name to short descriptor
+    media_pool_item = clip.GetMediaPoolItem()
+    if not media_pool_item:
+        return False
+
+    meta = analysis.to_resolve_metadata()
+    ok = True
+    for key, value in meta.items():
+        if not media_pool_item.SetMetadata(key, value):
+            ok = False
+    return ok
+
+
+def write_metadata(clip: Any, analysis: ClipAnalysis) -> bool:
+    """Write analysis to a timeline clip.
+
+    Writes to three places:
+    1. MediaPoolItem metadata (appears in Metadata panel)
+    2. TimelineItem name (per-clip, visible in timeline)
+    3. TimelineItem marker (per-clip, full details in marker note)
+
+    IMPORTANT: The clip should be the currently selected/active clip
+    in the timeline (playhead positioned on it) before calling this.
+    """
+    # 1. Write to MediaPoolItem metadata panel
+    _write_media_pool_metadata(clip, analysis)
+
+    # 2. Set clip name to short descriptor
     name = _build_clip_name(analysis)
     clip.SetName(name)
 
-    # Add marker at frame 0 (relative to clip start) with full details
+    # 3. Add marker at frame 0 (relative to clip start) with full details
     note = _build_marker_note(analysis)
     custom_data = _build_custom_data(analysis)
     marker_name = f"{MARKER_NAME_PREFIX}: {analysis.shot.shot_size or 'Analysis'}"

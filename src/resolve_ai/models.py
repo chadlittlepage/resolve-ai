@@ -112,3 +112,70 @@ class ClipAnalysis:
         meta["AI Model"] = self.model
 
         return meta
+
+    def to_resolve_metadata(self) -> dict[str, str]:
+        """Map analysis to Resolve's built-in metadata field names.
+
+        Only uses field names that Resolve accepts via SetMetadata().
+        Packs multiple analysis fields into the available built-in fields.
+        """
+        meta: dict[str, str] = {}
+
+        # Scene → Description
+        meta["Description"] = self.scene.scene
+
+        # Shot info → Shot
+        shot_parts = []
+        if self.shot.shot_size:
+            shot_parts.append(self.shot.shot_size)
+        if self.shot.composition:
+            shot_parts.append(self.shot.composition)
+        if self.shot.specialty and self.shot.specialty.lower() != "none":
+            shot_parts.append(self.shot.specialty)
+        meta["Shot"] = " | ".join(shot_parts)
+
+        # Camera angle → Angle
+        meta["Angle"] = self.shot.camera_angle
+
+        # Scene/location → Scene, Location
+        meta["Scene"] = self.scene.lighting
+        meta["Location"] = self.scene.location
+
+        # Environment = palette + time of day
+        env_parts = []
+        if self.scene.time_of_day:
+            env_parts.append(self.scene.time_of_day)
+        if self.scene.palette:
+            env_parts.append(self.scene.palette)
+        meta["Environment"] = " | ".join(env_parts)
+
+        # Shot Type = camera movement
+        meta["Shot Type"] = self.shot.camera_movement
+
+        # Keywords
+        meta["Keywords"] = self.scene.keywords
+
+        # Comments = colorist flags (only Yes flags)
+        flag_map = {
+            "Animation Cut": self.flags.animation_cut,
+            "Backs": self.flags.backs,
+            "Non-Fade Transitions": self.flags.non_fade_transitions,
+            "Flashes": self.flags.flashes,
+            "Quick Cuts": self.flags.quick_cuts,
+            "1-Shots Long": self.flags.one_shots_long,
+            "Bright Scene": self.flags.bright_scene,
+            "Dark Scene": self.flags.dark_scene,
+            "Mixed Textures": self.flags.mixed_textures,
+            "Yellows": self.flags.yellows,
+            "Landscape": self.flags.landscape,
+            "Large Flat Surface": self.flags.large_flat_surface,
+            "Face CU": self.flags.face_cu,
+            "No Face Then Face": self.flags.no_face_then_face,
+            "Skin Tones": self.flags.skin_tones,
+            "Moving Trees": self.flags.moving_trees,
+            "Water": self.flags.water,
+        }
+        yes_flags = [k for k, v in flag_map.items() if v]
+        meta["Comments"] = ", ".join(yes_flags) if yes_flags else ""
+
+        return meta

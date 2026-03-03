@@ -31,6 +31,10 @@ def test_write_metadata_sets_name_and_marker(mock_clip: MagicMock) -> None:
     mock_clip.SetName.assert_called_once_with("MCU | Single | Eye Level")
     mock_clip.AddMarker.assert_called_once()
 
+    # Verify MediaPoolItem metadata was also written
+    mpi = mock_clip.GetMediaPoolItem()
+    mpi.SetMetadata.assert_called()
+
     args = mock_clip.AddMarker.call_args.args
     assert args[0] == 0  # frame 0
     assert args[1] == "Cream"  # marker color

@@ -11,11 +11,7 @@ from rich.table import Table
 
 from resolve_ai.ai_analyzer import analyze_frame
 from resolve_ai.config import load_config
-from resolve_ai.frame_capture import (
-    capture_frames_gallery,
-    capture_frames_playhead,
-    load_frame_as_base64,
-)
+from resolve_ai.frame_capture import load_frame_as_base64
 from resolve_ai.metadata_writer import (
     clear_metadata,
     write_metadata,
@@ -70,31 +66,19 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
     if dry_run:
         console.print("[yellow]Dry run mode - no metadata will be written.[/yellow]")
 
-    # Capture frames via gallery, fall back to playhead method
-    console.print("\n[bold]Capturing frames...[/bold]")
-    try:
-        frame_paths = capture_frames_gallery(ctx, config.temp_dir)
-    except RuntimeError as e:
-        console.print(f"[yellow]Gallery capture failed ({e}), trying playhead method...[/yellow]")
-        try:
-            frame_paths = capture_frames_playhead(ctx, clips, config.temp_dir)
-        except RuntimeError as e2:
-            console.print(f"[red]Frame capture failed: {e2}[/red]")
-            return
+    # Switch to Color page (required for frame capture)
+    ctx.resolve.OpenPage("color")
 
-    if len(frame_paths) != len(clips):
-        console.print(
-            f"[yellow]Warning: {len(frame_paths)} frames captured "
-            f"for {len(clips)} clips. Matching by position.[/yellow]"
-        )
-
-    count = min(len(frame_paths), len(clips))
+    count = len(clips)
     succeeded = 0
     failed = 0
     skipped = 0
 
     # Get FPS from timeline settings
     fps = float(ctx.timeline.GetSetting("timelineFrameRate") or 24)
+
+    # Ensure temp dir exists for frame captures
+    config.temp_dir.mkdir(parents=True, exist_ok=True)
 
     with Progress(
         SpinnerColumn(),
@@ -105,28 +89,29 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
     ) as progress:
         task = progress.add_task("Analyzing clips", total=count)
 
-        for i in range(count):
-            clip = clips[i]
-            frame_path = frame_paths[i]
-
+        for i, clip in enumerate(clips):
             clip_name = clip.GetName() or f"Clip {i + 1}"
-            media_pool_item = clip.GetMediaPoolItem()
 
-            if not media_pool_item:
-                progress.update(task, advance=1, description=f"Skipped: {clip_name} (no media)")
-                skipped += 1
-                continue
+            # Step 1: Move playhead to clip midpoint (selects/highlights it)
+            start = clip.GetStart()
+            duration = clip.GetDuration()
+            mid_frame = start + duration // 2
+            ctx.timeline.SetCurrentTimecode(str(mid_frame))
 
-            if not frame_path.exists():
+            progress.update(task, advance=0, description=f"[{i+1}/{count}] {clip_name}")
+
+            # Step 2: Capture frame while clip is selected
+            frame_path = config.temp_dir / f"clip_{i:04d}.jpg"
+            capture_ok = ctx.project.ExportCurrentFrameAsStill(str(frame_path))
+
+            if not capture_ok or not frame_path.exists():
                 progress.update(task, advance=1, description=f"Skipped: {clip_name} (no frame)")
                 skipped += 1
                 continue
 
-            progress.update(task, advance=0, description=f"Analyzing: {clip_name}")
-
+            # Step 3: Analyze the captured frame
             try:
                 image_b64 = load_frame_as_base64(frame_path)
-                duration = clip.GetDuration()
 
                 analysis = analyze_frame(
                     config=config,
@@ -144,6 +129,7 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
                     console.print(f"  [cyan]{clip_name}:[/cyan] {analysis.scene.scene}")
                     succeeded += 1
                 else:
+                    # Step 4: Write metadata while clip is still selected
                     if write_metadata(clip, analysis):
                         succeeded += 1
                     else:
@@ -154,9 +140,12 @@ def analyze(track: int, dry_run: bool, scene_detect: bool) -> None:
                 console.print(f"  [red]Error on {clip_name}: {e}[/red]")
                 failed += 1
 
+            # Clean up frame file immediately
+            frame_path.unlink(missing_ok=True)
+
             progress.update(task, advance=1)
 
-    # Cleanup temp files
+    # Cleanup temp dir
     if config.temp_dir.exists():
         shutil.rmtree(config.temp_dir, ignore_errors=True)
 
