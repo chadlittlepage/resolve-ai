@@ -1,67 +1,68 @@
-"""Write AI analysis results back to DaVinci Resolve clip metadata."""
+"""Write AI analysis results to DaVinci Resolve timeline clips.
+
+Uses TimelineItem.SetName() and TimelineItem.AddMarker() which are per-clip,
+unlike MediaPoolItem.SetMetadata() which is shared across all clips from the
+same source (breaks with scene-detected timelines).
+"""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from resolve_ai.models import ClipAnalysis
 
-# Mapping of our analysis fields to Resolve's built-in metadata keys
-FIELD_MAP = {
-    "Description": "scene",
-    "Tone": "lighting",
-    "Keywords": "keywords",
-    "Location": "location",
-    "Environment": "time_of_day",
-    "Shot Type": "shot_size",
-    "Angle": "camera_angle",
-    "Shot": "camera_movement",
-    "Category": "composition",
-    "Scene": "specialty",
-}
-
-# All Resolve metadata keys that this tool writes
-AI_METADATA_KEYS = [
-    "Description",
-    "Tone",
-    "Keywords",
-    "Location",
-    "Environment",
-    "Shot Type",
-    "Angle",
-    "Shot",
-    "Category",
-    "Scene",
-    "Comments",
-    "Colorist",
-]
+# Marker color for AI analysis markers
+MARKER_COLOR = "Cream"
+MARKER_NAME_PREFIX = "AI"
 
 
-def _build_resolve_metadata(analysis: ClipAnalysis) -> dict[str, str]:
-    """Convert a ClipAnalysis to Resolve's built-in metadata fields."""
-    meta: dict[str, str] = {}
-
-    # Scene description fields
-    meta["Description"] = analysis.scene.scene
-    meta["Tone"] = analysis.scene.lighting
-    meta["Keywords"] = analysis.scene.keywords
-    meta["Location"] = analysis.scene.location
-    meta["Environment"] = analysis.scene.time_of_day
-
-    # Shot description fields
-    meta["Shot Type"] = analysis.shot.shot_size
-    meta["Angle"] = analysis.shot.camera_angle
-    meta["Shot"] = analysis.shot.camera_movement
-    meta["Category"] = analysis.shot.composition
-    meta["Scene"] = analysis.shot.specialty
-
-    # Pack palette + flags + system info into Comments
+def _build_clip_name(analysis: ClipAnalysis) -> str:
+    """Build a short descriptive clip name from the analysis."""
     parts: list[str] = []
+    if analysis.shot.shot_size:
+        parts.append(analysis.shot.shot_size)
+    if analysis.shot.composition:
+        parts.append(analysis.shot.composition)
+    if analysis.shot.camera_angle:
+        parts.append(analysis.shot.camera_angle)
+    return " | ".join(parts) if parts else analysis.clip_name
 
+
+def _build_marker_note(analysis: ClipAnalysis) -> str:
+    """Build the marker note with full analysis details."""
+    lines: list[str] = []
+
+    if analysis.scene.scene:
+        lines.append(analysis.scene.scene)
+
+    detail_parts: list[str] = []
+    if analysis.scene.lighting:
+        detail_parts.append(f"Lighting: {analysis.scene.lighting}")
     if analysis.scene.palette:
-        parts.append(f"Palette: {analysis.scene.palette}")
+        detail_parts.append(f"Palette: {analysis.scene.palette}")
+    if analysis.scene.location:
+        detail_parts.append(f"Location: {analysis.scene.location}")
+    if analysis.scene.time_of_day:
+        detail_parts.append(f"Time: {analysis.scene.time_of_day}")
+    if detail_parts:
+        lines.append(" | ".join(detail_parts))
 
-    # Colorist flags - only include Yes flags
+    shot_parts: list[str] = []
+    if analysis.shot.shot_size:
+        shot_parts.append(f"Size: {analysis.shot.shot_size}")
+    if analysis.shot.camera_angle:
+        shot_parts.append(f"Angle: {analysis.shot.camera_angle}")
+    if analysis.shot.camera_movement:
+        shot_parts.append(f"Move: {analysis.shot.camera_movement}")
+    if analysis.shot.composition:
+        shot_parts.append(f"Comp: {analysis.shot.composition}")
+    if analysis.shot.specialty and analysis.shot.specialty.lower() != "none":
+        shot_parts.append(f"Style: {analysis.shot.specialty}")
+    if shot_parts:
+        lines.append(" | ".join(shot_parts))
+
+    # Colorist flags - only Yes flags
     flag_map = {
         "Animation Cut": analysis.flags.animation_cut,
         "Backs": analysis.flags.backs,
@@ -83,66 +84,70 @@ def _build_resolve_metadata(analysis: ClipAnalysis) -> dict[str, str]:
     }
     yes_flags = [k for k, v in flag_map.items() if v]
     if yes_flags:
-        parts.append(f"Flags: {', '.join(yes_flags)}")
+        lines.append(f"Flags: {', '.join(yes_flags)}")
 
-    parts.append(f"AI: {analysis.model} | {analysis.analysis_date}")
+    if analysis.scene.keywords:
+        lines.append(f"Keywords: {analysis.scene.keywords}")
 
-    meta["Comments"] = " | ".join(parts)
+    return "\n".join(lines)
 
-    # Store model in Colorist field for easy filtering
-    meta["Colorist"] = f"AI ({analysis.model})"
 
-    return meta
+def _build_custom_data(analysis: ClipAnalysis) -> str:
+    """Build JSON custom data for programmatic access."""
+    return json.dumps(analysis.to_metadata_dict(), separators=(",", ":"))
 
 
 def write_metadata(clip: Any, analysis: ClipAnalysis) -> bool:
-    """Write analysis results to clip metadata.
+    """Write analysis to a timeline clip using SetName and AddMarker.
 
-    Uses MediaPoolItem.SetMetadata() with Resolve's built-in field names.
-    Returns True if at least the core fields were written successfully.
+    These methods are per-TimelineItem, so each clip gets its own data
+    even when multiple clips share the same source MediaPoolItem.
     """
-    media_pool_item = clip.GetMediaPoolItem()
-    if not media_pool_item:
-        return False
+    # Set clip name to short descriptor
+    name = _build_clip_name(analysis)
+    clip.SetName(name)
 
-    meta = _build_resolve_metadata(analysis)
+    # Add marker at frame 0 (relative to clip start) with full details
+    note = _build_marker_note(analysis)
+    custom_data = _build_custom_data(analysis)
+    marker_name = f"{MARKER_NAME_PREFIX}: {analysis.shot.shot_size or 'Analysis'}"
 
-    success = True
-    for key, value in meta.items():
-        if not media_pool_item.SetMetadata(key, value):
-            success = False
+    result = clip.AddMarker(
+        0,  # frameId: first frame of clip
+        MARKER_COLOR,  # color
+        marker_name,  # name
+        note,  # note
+        1,  # duration (1 frame)
+        custom_data,  # customData (JSON)
+    )
 
-    return success
+    return bool(result)
 
 
 def clear_metadata(clip: Any) -> bool:
-    """Remove all AI-generated metadata from a clip."""
-    media_pool_item = clip.GetMediaPoolItem()
-    if not media_pool_item:
-        return False
+    """Remove all AI markers and reset clip name."""
+    # Delete all markers with our color
+    result = clip.DeleteMarkersByColor(MARKER_COLOR)
 
-    success = True
-    for key in AI_METADATA_KEYS:
-        if not media_pool_item.SetMetadata(key, ""):
-            success = False
+    # Reset clip name to empty (Resolve will show source name)
+    clip.SetName("")
 
-    return success
+    return bool(result)
 
 
 def read_metadata(clip: Any) -> dict[str, str]:
-    """Read current AI metadata from a clip."""
-    media_pool_item = clip.GetMediaPoolItem()
-    if not media_pool_item:
+    """Read AI analysis from clip markers."""
+    markers = clip.GetMarkers()
+    if not markers:
         return {}
 
-    result: dict[str, str] = {}
-    all_meta = media_pool_item.GetMetadata()
-    if not all_meta:
-        return {}
+    # Find first marker with our color
+    for _frame_id, marker in markers.items():
+        if marker.get("color") == MARKER_COLOR and marker.get("name", "").startswith(
+            MARKER_NAME_PREFIX
+        ):
+            custom = marker.get("customData", "")
+            if custom:
+                return json.loads(custom)  # type: ignore[no-any-return]
 
-    for key in AI_METADATA_KEYS:
-        val = all_meta.get(key, "")
-        if val:
-            result[key] = val
-
-    return result
+    return {}
